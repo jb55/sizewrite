@@ -1,0 +1,67 @@
+
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <inttypes.h>
+#include <err.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+
+int usage() {
+    printf("usage: sizewrite <infile> <devicefile>\n");
+    return 1;
+}
+
+int main(int argc, const char *argv[])
+{
+  struct stat st;
+  int sfd, dfd;
+  unsigned char *src, *dest;
+
+  if (argc < 3)
+      return usage();
+
+  const char *srcfile = argv[1];
+  const char *dstfile = argv[2];
+
+  stat(srcfile, &st);
+  int64_t size = st.st_size + sizeof(size);
+  int64_t fsize = st.st_size;
+
+  sfd = open(srcfile, O_RDONLY);
+  if (sfd == -1)
+      err(1, "%s", srcfile);
+
+  src = mmap(NULL, size, PROT_READ, MAP_PRIVATE, sfd, 0);
+  if (src == MAP_FAILED)
+      err(1, "%s", srcfile);
+
+  dfd = open(dstfile, O_RDWR);
+  if (!dfd)
+      err(1, "%s", dstfile);
+
+  /* int res = ftruncate(dfd, size); */
+  /* if (res == -1) */
+  /*     err(1, "%s", dstfile); */
+
+  dest = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, dfd, 0);
+  if (dest == MAP_FAILED)
+      err(1, "%s", dstfile);
+
+  fprintf(stderr, "writing %ld+%"PRId64" bytes to %s\n", sizeof(size),
+          size-sizeof(size), dstfile);
+
+  memcpy(dest, &fsize, sizeof(fsize));
+  memcpy(dest+sizeof(size), src, size-sizeof(size));
+
+  munmap(src, size);
+  munmap(dest, size);
+
+  close(sfd);
+  close(dfd);
+  return 0;
+}
